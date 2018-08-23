@@ -1,0 +1,28 @@
+[submodule "vendor/github.com/agl/ed25519"]
+	path = vendor/github.com/agl/ed25519
+	url = https://github.com/agl/ed25519.git
+[submodule "vendor/github.com/btcsuite/btcd"]
+	path = vendor/github.com/btcsuite/btcd
+	url = https://github.com/btcsuite/btcd.git
+[submodule "vendor/github.com/fatih/color"]
+	path = vendor/github.com/fatih/color
+	url = https://github.com/fatih/color.git
+[submodule "vendor/github.com/golang/glog"]
+	path = vendor/github.com/golang/glog
+	url = https://github.com/golang/glog.git
+[submodule "vendor/github.com/gorilla/websocket"]
+	path = vendor/github.com/gorilla/websocket
+	url = https://github.com/gorilla/websocket.git
+[submodule "vendor/github.com/willf/bitset"]
+	path = vendor/github.com/willf/bitset
+	url = https://github.com/willf/bitset.git
+[submodule "vendor/golang.org/x/crypto"]
+	path = vendor/golang.org/x/crypto
+	url = https://go.googlesource.com/crypto.git
+[submodule "vendor/github.com/alecthomas/log4go"]
+	path = vendor/github.com/alecthomas/log4go
+	url = https://github.com/alecthomas/log4go.git
+[submodule "vendor/gopkg.in/tomb.v1"]
+	path = vendor/gopkg.in/tomb.v1
+	url = https://github.com/go-tomb/tomb.git
+	branch = v1
