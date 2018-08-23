@@ -5,7 +5,7 @@ import (
 	"github.com/rubblelabs/ripple/websockets"
 )
 
-func BuildPayment(r *websockets.Remote, srcAddr, dstAddr string, amount, fee int64, memo string) (data.Transaction, error) {
+func BuildPayment(r *websockets.Remote, srcAddr, dstAddr string, amount interface{}, fee int64, memo string) (data.Transaction, error) {
 	tx := &data.Payment{}
 	tx.TxBase.TransactionType = data.PAYMENT
 
@@ -29,11 +29,18 @@ func BuildPayment(r *websockets.Remote, srcAddr, dstAddr string, amount, fee int
 	}
 	tx.Amount = *am
 
+	// dst tag
+	// we put memo to DestinationTag field
+	tag, err := BuildTag(memo)
+	if err != nil {
+		return nil, err
+	}
+	tx.DestinationTag = tag
+
 	return tx, nil
 }
 
-
-func SendPayment(r *websockets.Remote, srcAddr, dstAddr string, amount, fee int64, memo string, seed string) (data.Transaction, *websockets.SubmitResult, error) {
+func SendPayment(r *websockets.Remote, srcAddr, dstAddr string, amount interface{}, fee int64, memo string, seed string) (data.Transaction, *websockets.SubmitResult, error) {
 	tx, err := BuildPayment(r, srcAddr, dstAddr, amount, fee, memo)
 	if err != nil {
 		return nil, nil, err

@@ -5,7 +5,7 @@ import "testing"
 func TestAccount(t *testing.T)  {
 	/// test0
 	ss1 := make(map[string]*RippledKeyPair)
-	for i := 0; i < 1000000 ;i++ {
+	for i := 0; i < 1 ;i++ {
 		k, err := NewAccount()
 		if err != nil {
 			t.Fatalf("NewAccount err : %v", err)

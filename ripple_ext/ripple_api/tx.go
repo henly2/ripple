@@ -71,16 +71,16 @@ func PrepareTx(tx data.Transaction, r *websockets.Remote, srcAddr string, fee in
 	base.Fee = *f
 
 	// memo
-	if memo != ""{
-		mm := data.Memo{
-			Memo: struct {
-				MemoType   data.VariableLength
-				MemoData   data.VariableLength
-				MemoFormat data.VariableLength
-			}{MemoType: data.VariableLength("test"), MemoData: data.VariableLength(memo), MemoFormat: data.VariableLength("plain/text")},
-		}
-		base.Memos = append(base.Memos, mm)
-	}
+	//if memo != ""{
+	//	mm := data.Memo{
+	//		Memo: struct {
+	//			MemoType   data.VariableLength
+	//			MemoData   data.VariableLength
+	//			MemoFormat data.VariableLength
+	//		}{MemoType: data.VariableLength("test"), MemoData: data.VariableLength(memo), MemoFormat: data.VariableLength("plain/text")},
+	//	}
+	//	base.Memos = append(base.Memos, mm)
+	//}
 
 	return nil
 }
