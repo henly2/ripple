@@ -125,7 +125,7 @@ func (c *Connection) loop2(startIndex uint32) {
 				c.logger.Error("loopLedgerTx index:%d, err:%v", index, err)
 			} else {
 				if !cc.Ledger.Closed {
-					c.logger.Warns("get unclosed ledger %d", cc.Ledger.LedgerSequence)
+					c.logger.Warn("get unclosed ledger %d", cc.Ledger.LedgerSequence)
 				} else {
 					c.Ledgers <- &cc.Ledger
 

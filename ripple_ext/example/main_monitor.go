@@ -27,13 +27,36 @@ func loop(m *monitor.Monitor) {
 	}
 }
 
+type CCLog struct {
+}
+
+func (self *CCLog) Info(arg0 interface{}, args ...interface{}) {
+	l4g.Global.Info(arg0, args...)
+}
+
+func (self *CCLog) Trace(arg0 interface{}, args ...interface{}) {
+	l4g.Global.Trace(arg0, args...)
+}
+
+func (self *CCLog) Warn(arg0 interface{}, args ...interface{}) {
+	l4g.Global.Warn(arg0, args...)
+}
+
+func (self *CCLog) Error(arg0 interface{}, args ...interface{}) {
+	l4g.Global.Error(arg0, args...)
+}
+
+func (self *CCLog) Debug(arg0 interface{}, args ...interface{}) {
+	l4g.Global.Debug(arg0, args...)
+}
+
 func main()  {
 	flag.Parse()
 
 	l4g.LoadConfiguration("log.xml")
 	defer l4g.Close()
 
-	m := monitor.NewMonitor(l4g.Global, uris, 0)
+	m := monitor.NewMonitor(&CCLog{}, uris, 0)
 	go loop(m)
 
 	fmt.Println("Press Ctrl+c to quit...")
