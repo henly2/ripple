@@ -84,3 +84,15 @@ func GetAccountSeqNum(r *websockets.Remote, address string) (uint32, error) {
 
 	return *a.AccountData.Sequence, nil
 }
+
+func IsValidAccount(addressOrSeed string) (bool) {
+	// seed?
+	_, err := data.NewSeedFromAddress(addressOrSeed)
+	if err == nil {
+		return true
+	}
+
+	// address
+	_, err = data.NewAccountFromAddress(addressOrSeed)
+	return err == nil
+}

@@ -4,6 +4,8 @@ import (
 	"github.com/rubblelabs/ripple/data"
 	"fmt"
 	"github.com/rubblelabs/ripple/websockets"
+	"encoding/json"
+	"encoding/base64"
 )
 
 func SignTx(tx data.Signer, seed string) error {
@@ -83,4 +85,32 @@ func PrepareTx(tx data.Transaction, r *websockets.Remote, srcAddr string, fee in
 	//}
 
 	return nil
+}
+
+func TxToString(tx data.Transaction) (string, error) {
+	txMeta := data.TransactionWithMetaData{
+		Transaction:tx,
+	}
+
+	txBytes, err := json.Marshal(txMeta)
+	if err != nil {
+		return "", err
+	}
+
+	txSting := base64.StdEncoding.EncodeToString(txBytes)
+	return txSting, nil
+}
+
+func TxFromString(txString string) (data.Transaction, error) {
+	txBytes, err := base64.StdEncoding.DecodeString(txString)
+	if err != nil {
+		return nil, err
+	}
+
+	txMeta := &data.TransactionWithMetaData{}
+	if err := json.Unmarshal(txBytes, txMeta); err != nil {
+		return nil, err
+	}
+
+	return txMeta.Transaction, nil
 }
