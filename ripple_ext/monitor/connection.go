@@ -3,31 +3,31 @@ package monitor
 import (
 	"fmt"
 	"github.com/rubblelabs/ripple/data"
+	"github.com/rubblelabs/ripple/ripple_ext/logger"
 	"github.com/rubblelabs/ripple/websockets"
 	"gopkg.in/tomb.v1"
 	"time"
-	l4g "github.com/alecthomas/log4go"
 )
 
 type Connection struct {
-	Ledgers               chan *data.Ledger
-	Err                   error
+	Ledgers chan *data.Ledger
+	Err     error
 
-	conn                  *websockets.Remote
-	t1                    tomb.Tomb
-	t2                    tomb.Tomb
+	conn *websockets.Remote
+	t1   tomb.Tomb
+	t2   tomb.Tomb
 
-	latestIndex 		  uint32
-	ledgerIndexCh         chan uint32
+	latestIndex   uint32
+	ledgerIndexCh chan uint32
 
-	logger 			l4g.Logger
+	logger logger.Logger
 }
 
-func NewConnection(logger l4g.Logger, uri string, beginIndex uint32) (c *Connection, err error) {
+func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Connection, err error) {
 	c = &Connection{
-		logger:			logger,
-		Ledgers: 		make(chan *data.Ledger),
-		ledgerIndexCh: 	make(chan uint32, 256),
+		logger:        logger,
+		Ledgers:       make(chan *data.Ledger),
+		ledgerIndexCh: make(chan uint32, 256),
 	}
 
 	// Connect to websocket server
@@ -57,7 +57,7 @@ func NewConnection(logger l4g.Logger, uri string, beginIndex uint32) (c *Connect
 	return
 }
 
-func (c *Connection)Stop() {
+func (c *Connection) Stop() {
 	c.logger.Info("stop connection ...")
 
 	c.Err = nil
@@ -65,7 +65,7 @@ func (c *Connection)Stop() {
 	c.t2.Kill(nil)
 }
 
-func (c *Connection)Wait() {
+func (c *Connection) Wait() {
 	c.logger.Info("wait connection close ...")
 
 	c.t1.Wait()
@@ -109,7 +109,7 @@ func (c *Connection) handleMessage(msg interface{}) {
 	}
 }
 
-func (c *Connection)loop2(startIndex uint32)  {
+func (c *Connection) loop2(startIndex uint32) {
 	defer c.logger.Info("connection loop2 quit...")
 	defer c.t2.Done()
 	defer close(c.Ledgers)
@@ -119,13 +119,13 @@ func (c *Connection)loop2(startIndex uint32)  {
 	for {
 		needSleep = true
 
-		if c.latestIndex + 1 > index {
+		if c.latestIndex+1 > index {
 			cc, err := c.conn.Ledger(index, true)
 			if err != nil {
 				c.logger.Error("loopLedgerTx index:%d, err:%v", index, err)
 			} else {
 				if !cc.Ledger.Closed {
-					c.logger.Warn("get unclosed ledger %d", cc.Ledger.LedgerSequence)
+					c.logger.Warns("get unclosed ledger %d", cc.Ledger.LedgerSequence)
 				} else {
 					c.Ledgers <- &cc.Ledger
 
@@ -139,7 +139,7 @@ func (c *Connection)loop2(startIndex uint32)  {
 		select {
 		case <-c.t2.Dying():
 			return
-		case _, ok := <- c.ledgerIndexCh:
+		case _, ok := <-c.ledgerIndexCh:
 			if !ok {
 				c.t2.Kill(nil)
 				return
@@ -151,7 +151,7 @@ func (c *Connection)loop2(startIndex uint32)  {
 		// sleep
 		if needSleep {
 			c.logger.Info("connection loop2 sleep 5 seconds...")
-			time.Sleep(time.Second*5)
+			time.Sleep(time.Second * 5)
 		}
 	}
 }

@@ -1,28 +1,28 @@
 package monitor
 
 import (
-	"time"
-	"gopkg.in/tomb.v1"
 	"github.com/rubblelabs/ripple/data"
-	l4g "github.com/alecthomas/log4go"
+	"github.com/rubblelabs/ripple/ripple_ext/logger"
+	"gopkg.in/tomb.v1"
+	"time"
 )
 
 type Monitor struct {
-	t       		tomb.Tomb
-	ledgers 		chan *data.Ledger
+	t       tomb.Tomb
+	ledgers chan *data.Ledger
 
-	uris 			[]string
-	scanLedgerIdx 	uint32
+	uris          []string
+	scanLedgerIdx uint32
 
-	logger 			l4g.Logger
+	logger logger.Logger
 }
 
-func NewMonitor(logger l4g.Logger, uris []string, startLedgerIdx uint32) *Monitor {
+func NewMonitor(logger logger.Logger, uris []string, startLedgerIdx uint32) *Monitor {
 	m := &Monitor{
-		logger:			  logger,
-		ledgers:          make(chan *data.Ledger),
-		scanLedgerIdx:    startLedgerIdx,
-		uris:			  uris,
+		logger:        logger,
+		ledgers:       make(chan *data.Ledger),
+		scanLedgerIdx: startLedgerIdx,
+		uris:          uris,
 	}
 
 	go m.loop()
@@ -69,7 +69,7 @@ func (m *Monitor) loop() {
 
 func (m *Monitor) handleConnection(uri string) (err error) {
 	var (
-		c *Connection
+		c    *Connection
 		stop bool
 	)
 
@@ -99,4 +99,3 @@ func (m *Monitor) handleConnection(uri string) (err error) {
 		}
 	}
 }
-
