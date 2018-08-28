@@ -14,6 +14,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 	"github.com/rubblelabs/ripple/data"
+	"sync"
 )
 
 const (
@@ -30,10 +31,18 @@ const (
 	dialTimeout = 5 * time.Second
 )
 
+var (
+	errDisconnected = &CommandError{Name:"ws", Code:-1, Message:"ws disconnected"}
+)
+
 type Remote struct {
 	Incoming chan interface{}
 	outgoing chan Syncer
 	ws       *websocket.Conn
+
+	// FIXME: 没有控制在断开之后，还发送指令，造成永远无法返回的死锁问题?
+	mutex sync.RWMutex
+	disconnected bool
 }
 
 // NewRemote returns a new remote session connected to the specified
@@ -58,14 +67,36 @@ func NewRemote(endpoint string) (*Remote, error) {
 		ws:       ws,
 	}
 
+	r.disconnected = false
+
 	go r.run()
 	return r, nil
+}
+
+func (r *Remote) setDisconnected() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.disconnected = true
+}
+
+func (r *Remote) canSendCommand(syncer Syncer) bool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	if r.disconnected {
+		return false
+	}
+
+	r.outgoing <- syncer
+	return true
 }
 
 // Close shuts down the Remote session and blocks until all internal
 // goroutines have been cleaned up.
 // Any commands that are pending a response will return with an error.
 func (r *Remote) Close() {
+	// set disconnect flag, then no command to pending
+	r.setDisconnected()
+
 	close(r.outgoing)
 
 	// Drain the Incoming channel and block until it is closed,
@@ -81,6 +112,9 @@ func (r *Remote) run() {
 	pending := make(map[uint64]Syncer)
 
 	defer func() {
+		// set disconnect flag, then no command to pending
+		r.setDisconnected()
+
 		close(outbound) // Shuts down the writePump
 		close(r.Incoming)
 
@@ -161,7 +195,10 @@ func (r *Remote) Tx(hash data.Hash256) (*TxResult, error) {
 		Command:     newCommand("tx"),
 		Transaction: hash,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -173,7 +210,11 @@ func (r *Remote) accountTx(account data.Account, c chan *data.TransactionWithMet
 	defer close(c)
 	cmd := newAccountTxCommand(account, pageSize, nil, minLedger, maxLedger)
 	for ; ; cmd = newAccountTxCommand(account, pageSize, cmd.Result.Marker, minLedger, maxLedger) {
-		r.outgoing <- cmd
+		if b := r.canSendCommand(cmd); !b {
+			glog.Errorln(errDisconnected.Error())
+			return
+		}
+		//r.outgoing <- cmd
 		<-cmd.Ready
 		if cmd.CommandError != nil {
 			glog.Errorln(cmd.Error())
@@ -212,7 +253,10 @@ func (r *Remote) Submit(tx data.Transaction) (*SubmitResult, error) {
 		Command: newCommand("submit"),
 		TxBlob:  fmt.Sprintf("%X", raw),
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -233,7 +277,10 @@ func (r *Remote) SubmitBatch(txs []data.Transaction) ([]*SubmitResult, error) {
 			Command: newCommand("submit"),
 			TxBlob:  fmt.Sprintf("%X", raw),
 		}
-		r.outgoing <- cmd
+		if b := r.canSendCommand(cmd); !b {
+			return nil, errDisconnected
+		}
+		//r.outgoing <- cmd
 		commands[i] = cmd
 	}
 	for i := range commands {
@@ -250,7 +297,10 @@ func (r *Remote) LedgerData(ledger interface{}, marker *data.Hash256) (*LedgerDa
 		Ledger:  ledger,
 		Marker:  marker,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -262,7 +312,11 @@ func (r *Remote) streamLedgerData(ledger interface{}, c chan data.LedgerEntrySli
 	defer close(c)
 	cmd := newBinaryLedgerDataCommand(ledger, nil)
 	for ; ; cmd = newBinaryLedgerDataCommand(ledger, cmd.Result.Marker) {
-		r.outgoing <- cmd
+		if b := r.canSendCommand(cmd); !b {
+			glog.Errorln(cmd.Error())
+			return
+		}
+		//r.outgoing <- cmd
 		<-cmd.Ready
 		if cmd.CommandError != nil {
 			glog.Errorln(cmd.Error())
@@ -305,7 +359,10 @@ func (r *Remote) Ledger(ledger interface{}, transactions bool) (*LedgerResult, e
 		Transactions: transactions,
 		Expand:       true,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -319,7 +376,10 @@ func (r *Remote) LedgerHeader(ledger interface{}) (*LedgerHeaderResult, error) {
 		Command: newCommand("ledger_header"),
 		Ledger:  ledger,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -336,7 +396,10 @@ func (r *Remote) RipplePathFind(src, dest data.Account, amount data.Amount, srcC
 		DestAccount:   dest,
 		DestAmount:    amount,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -350,7 +413,10 @@ func (r *Remote) AccountInfo(a data.Account) (*AccountInfoResult, error) {
 		Command: newCommand("account_info"),
 		Account: a,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -372,7 +438,10 @@ func (r *Remote) AccountLines(account data.Account, ledgerIndex interface{}) (*A
 			Marker:      marker,
 			LedgerIndex: ledgerIndex,
 		}
-		r.outgoing <- cmd
+		if b := r.canSendCommand(cmd); !b {
+			return nil, errDisconnected
+		}
+		//r.outgoing <- cmd
 		<-cmd.Ready
 		switch {
 		case cmd.CommandError != nil:
@@ -405,7 +474,10 @@ func (r *Remote) AccountOffers(account data.Account, ledgerIndex interface{}) (*
 			Marker:      marker,
 			LedgerIndex: ledgerIndex,
 		}
-		r.outgoing <- cmd
+		if b := r.canSendCommand(cmd); !b {
+			return nil, errDisconnected
+		}
+		//r.outgoing <- cmd
 		<-cmd.Ready
 		switch {
 		case cmd.CommandError != nil:
@@ -433,7 +505,10 @@ func (r *Remote) BookOffers(taker data.Account, ledgerIndex interface{}, pays, g
 		TakerGets:   gets,
 		Limit:       5000, // Marker not implemented....
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -461,7 +536,10 @@ func (r *Remote) Subscribe(ledger, transactions, transactionsProposed, server bo
 		Command: newCommand("subscribe"),
 		Streams: streams,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -489,7 +567,10 @@ func (r *Remote) SubscribeOrderBooks(books []OrderBookSubscription) (*SubscribeR
 		Streams: []string{"ledger", "server"},
 		Books:   books,
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError
@@ -501,7 +582,10 @@ func (r *Remote) Fee() (*FeeResult, error) {
 	cmd := &FeeCommand{
 		Command: newCommand("fee"),
 	}
-	r.outgoing <- cmd
+	if b := r.canSendCommand(cmd); !b {
+		return nil, errDisconnected
+	}
+	//r.outgoing <- cmd
 	<-cmd.Ready
 	if cmd.CommandError != nil {
 		return nil, cmd.CommandError

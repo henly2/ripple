@@ -16,10 +16,11 @@ import (
 
 var uris []string = []string{
 	//"wss://s-west.ripple.com:443",
-	//"wss://s-east.ripple.com:443",
 	//"wss://s1.ripple.com:443",
-	"wss://s.altnet.rippletest.net:51233",
-	//"ws://127.0.0.1:6006",
+	//"wss://s2.ripple.com:443",
+	//"wss://s.altnet.rippletest.net:51233",
+	"ws://54.164.156.177:5006",
+	//"ws://127.0.0.1:5006",
 }
 func loop(m *monitor.Monitor) {
 	for {
