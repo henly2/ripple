@@ -10,6 +10,8 @@ import (
 	l4g "github.com/alecthomas/log4go"
 	"encoding/json"
 	"time"
+	"github.com/rubblelabs/ripple/websockets"
+	"github.com/rubblelabs/ripple/data"
 )
 
 var uris []string = []string{
@@ -21,17 +23,18 @@ var uris []string = []string{
 }
 func loop(m *monitor.Monitor) {
 	for {
-		ledger := <-m.Ledgers()
-		fmt.Printf("Ledger %d with %d transactions:\n", ledger.LedgerSequence, len(ledger.Transactions))
-		for _, txn := range ledger.Transactions {
-			fmt.Printf("  %s %s\n", txn.GetBase().Hash, txn.GetBase().TransactionType)
+		d := <-m.Datas()
+		if msg, ok := d.(*websockets.LedgerStreamMsg); ok {
+			b, _ := json.MarshalIndent(msg, " ", "")
+			l4g.Info("====22222====")
+			l4g.Info(string(b))
+			l4g.Info("====22222====")
+		} else if ledger, ok := d.(*data.Ledger); ok {
+			fmt.Printf("Ledger %d with %d transactions:\n", ledger.LedgerSequence, len(ledger.Transactions))
+			for _, txn := range ledger.Transactions {
+				fmt.Printf("  %s %s\n", txn.GetBase().Hash, txn.GetBase().TransactionType)
+			}
 		}
-
-		sss := m.LedgerStream()
-		b, _ := json.MarshalIndent(sss, " ", "")
-		l4g.Info("====22222====")
-		l4g.Info(string(b))
-		l4g.Info("====22222====")
 	}
 }
 
@@ -66,12 +69,6 @@ func main()  {
 
 	m := monitor.NewMonitor(&CCLog{}, uris, 0)
 	go loop(m)
-
-	sss := m.LedgerStream()
-	b, _ := json.MarshalIndent(sss, " ", "")
-	l4g.Info("====11111====")
-	l4g.Info(string(b))
-	l4g.Info("====11111====")
 
 	fmt.Println("Press Ctrl+c to quit...")
 	c := make(chan os.Signal, 1)

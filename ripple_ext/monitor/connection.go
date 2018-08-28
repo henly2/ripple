@@ -20,8 +20,6 @@ type Connection struct {
 	ledgerStream chan *websockets.LedgerStreamMsg
 
 	logger logger.Logger
-
-	subResult *websockets.SubscribeResult
 }
 
 func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Connection, err error) {
@@ -39,13 +37,14 @@ func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Conn
 	}
 
 	// Subscribe to ledgers, and server messages
-	c.subResult, err = c.conn.Subscribe(true, false, false, true)
+	var confirmation *websockets.SubscribeResult
+	confirmation, err = c.conn.Subscribe(true, false, false, true)
 	if err != nil {
 		c.logger.Error("subscribe err: %v", err)
 		return
 	}
-	c.latestIndex = c.subResult.LedgerSequence
-	c.logger.Info("subscribe ledger index:%d", c.subResult.LedgerSequence)
+	c.latestIndex = confirmation.LedgerSequence
+	c.logger.Info("subscribe ledger index:%d", confirmation.LedgerSequence)
 
 	if beginIndex == 0 {
 		beginIndex = c.latestIndex
@@ -55,10 +54,6 @@ func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Conn
 	go c.loop2(beginIndex)
 
 	return
-}
-
-func (c *Connection) SubResult() *websockets.SubscribeResult {
-	return c.subResult
 }
 
 func (c *Connection) Stop() {
