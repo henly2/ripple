@@ -5,6 +5,8 @@ import (
 	"github.com/rubblelabs/ripple/ripple_ext/logger"
 	"gopkg.in/tomb.v1"
 	"time"
+	"github.com/rubblelabs/ripple/websockets"
+	"sync"
 )
 
 type Monitor struct {
@@ -15,6 +17,9 @@ type Monitor struct {
 	scanLedgerIdx uint32
 
 	logger logger.Logger
+
+	ledgerStream websockets.LedgerStreamMsg
+	locker sync.Mutex
 }
 
 func NewMonitor(logger logger.Logger, uris []string, startLedgerIdx uint32) *Monitor {
@@ -40,6 +45,20 @@ func (m *Monitor) Stop() {
 
 func (m *Monitor) Ledgers() chan *data.Ledger {
 	return m.ledgers
+}
+
+func (m *Monitor) LedgerStream() websockets.LedgerStreamMsg {
+	m.locker.Lock()
+	defer m.locker.Unlock()
+	return m.ledgerStream
+}
+
+func (m *Monitor) SetLedgerStream(msg *websockets.LedgerStreamMsg) {
+	m.locker.Lock()
+	defer m.locker.Unlock()
+	if msg != nil {
+		m.ledgerStream = *msg
+	}
 }
 
 func (m *Monitor) loop() {
@@ -80,6 +99,8 @@ func (m *Monitor) handleConnection(uri string) (err error) {
 	}
 	defer c.Wait()
 
+	m.SetLedgerStream(c.SubResult().LedgerStreamMsg)
+
 	stop = false
 	for {
 		select {
@@ -89,13 +110,17 @@ func (m *Monitor) handleConnection(uri string) (err error) {
 				stop = true
 				c.Stop()
 			}
-		case ledger, ok := <-c.Ledgers:
+		case d, ok := <-c.Data:
 			if !ok {
 				// Ripple connection is dead
 				return c.Err
 			}
-			m.ledgers <- ledger
-			m.scanLedgerIdx = ledger.LedgerSequence
+			if ledger, ok := d.(*data.Ledger); ok {
+				m.ledgers <- ledger
+				m.scanLedgerIdx = ledger.LedgerSequence
+			} else if msg, ok := d.(*websockets.LedgerStreamMsg); ok {
+				m.SetLedgerStream(msg)
+			}
 		}
 	}
 }

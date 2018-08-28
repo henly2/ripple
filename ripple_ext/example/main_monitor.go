@@ -8,14 +8,16 @@ import (
 	"os/signal"
 	"syscall"
 	l4g "github.com/alecthomas/log4go"
+	"encoding/json"
+	"time"
 )
 
 var uris []string = []string{
 	//"wss://s-west.ripple.com:443",
 	//"wss://s-east.ripple.com:443",
 	//"wss://s1.ripple.com:443",
-	//"wss://s.altnet.rippletest.net:51233",
-	"ws://127.0.0.1:6006",
+	"wss://s.altnet.rippletest.net:51233",
+	//"ws://127.0.0.1:6006",
 }
 func loop(m *monitor.Monitor) {
 	for {
@@ -24,6 +26,12 @@ func loop(m *monitor.Monitor) {
 		for _, txn := range ledger.Transactions {
 			fmt.Printf("  %s %s\n", txn.GetBase().Hash, txn.GetBase().TransactionType)
 		}
+
+		sss := m.LedgerStream()
+		b, _ := json.MarshalIndent(sss, " ", "")
+		l4g.Info("====22222====")
+		l4g.Info(string(b))
+		l4g.Info("====22222====")
 	}
 }
 
@@ -59,6 +67,12 @@ func main()  {
 	m := monitor.NewMonitor(&CCLog{}, uris, 0)
 	go loop(m)
 
+	sss := m.LedgerStream()
+	b, _ := json.MarshalIndent(sss, " ", "")
+	l4g.Info("====11111====")
+	l4g.Info(string(b))
+	l4g.Info("====11111====")
+
 	fmt.Println("Press Ctrl+c to quit...")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -67,5 +81,6 @@ func main()  {
 	l4g.Debug("stop...")
 	m.Stop()
 	l4g.Debug("stop... ok")
+	time.Sleep(time.Second*3)
 	return
 }

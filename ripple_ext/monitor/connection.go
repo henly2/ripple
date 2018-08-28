@@ -2,7 +2,6 @@ package monitor
 
 import (
 	"fmt"
-	"github.com/rubblelabs/ripple/data"
 	"github.com/rubblelabs/ripple/ripple_ext/logger"
 	"github.com/rubblelabs/ripple/websockets"
 	"gopkg.in/tomb.v1"
@@ -10,24 +9,26 @@ import (
 )
 
 type Connection struct {
-	Ledgers chan *data.Ledger
-	Err     error
+	Data chan interface{}
+	Err  error
 
 	conn *websockets.Remote
 	t1   tomb.Tomb
 	t2   tomb.Tomb
 
-	latestIndex   uint32
-	ledgerIndexCh chan uint32
+	latestIndex  uint32
+	ledgerStream chan *websockets.LedgerStreamMsg
 
 	logger logger.Logger
+
+	subResult *websockets.SubscribeResult
 }
 
 func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Connection, err error) {
 	c = &Connection{
-		logger:        logger,
-		Ledgers:       make(chan *data.Ledger),
-		ledgerIndexCh: make(chan uint32, 256),
+		logger:       logger,
+		Data:         make(chan interface{}),
+		ledgerStream: make(chan *websockets.LedgerStreamMsg, 256),
 	}
 
 	// Connect to websocket server
@@ -38,14 +39,13 @@ func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Conn
 	}
 
 	// Subscribe to ledgers, and server messages
-	var confirmation *websockets.SubscribeResult
-	confirmation, err = c.conn.Subscribe(true, false, false, true)
+	c.subResult, err = c.conn.Subscribe(true, false, false, true)
 	if err != nil {
 		c.logger.Error("subscribe err: %v", err)
 		return
 	}
-	c.latestIndex = confirmation.LedgerSequence
-	c.logger.Info("subscribe ledger index:%d, basefee:%d", confirmation.LedgerSequence, confirmation.BaseFee)
+	c.latestIndex = c.subResult.LedgerSequence
+	c.logger.Info("subscribe ledger index:%d", c.subResult.LedgerSequence)
 
 	if beginIndex == 0 {
 		beginIndex = c.latestIndex
@@ -55,6 +55,10 @@ func NewConnection(logger logger.Logger, uri string, beginIndex uint32) (c *Conn
 	go c.loop2(beginIndex)
 
 	return
+}
+
+func (c *Connection) SubResult() *websockets.SubscribeResult {
+	return c.subResult
 }
 
 func (c *Connection) Stop() {
@@ -78,7 +82,7 @@ func (c *Connection) Wait() {
 func (c *Connection) loop1() {
 	defer c.logger.Info("connection loop1 exit...")
 	defer c.t1.Done()
-	defer close(c.ledgerIndexCh)
+	defer close(c.ledgerStream)
 
 	for {
 		// If the tomb is marked dying, exit cleanly
@@ -101,7 +105,7 @@ func (c *Connection) handleMessage(msg interface{}) {
 	case *websockets.LedgerStreamMsg:
 		c.logger.Debug("LedgerStreamMsg, index=%d, tx count=%d", msg.LedgerSequence, msg.TxnCount)
 		c.latestIndex = msg.LedgerSequence
-		c.ledgerIndexCh <- msg.LedgerSequence
+		c.ledgerStream <- msg
 	case *websockets.TransactionStreamMsg:
 		c.logger.Debug("TransactionStreamMsg, ledger index=%d, hash=%s", msg.LedgerSequence, msg.Transaction.GetBase().Hash)
 	case *websockets.ServerStreamMsg:
@@ -112,7 +116,7 @@ func (c *Connection) handleMessage(msg interface{}) {
 func (c *Connection) loop2(startIndex uint32) {
 	defer c.logger.Info("connection loop2 quit...")
 	defer c.t2.Done()
-	defer close(c.Ledgers)
+	defer close(c.Data)
 
 	needSleep := true
 	index := startIndex
@@ -127,7 +131,8 @@ func (c *Connection) loop2(startIndex uint32) {
 				if !cc.Ledger.Closed {
 					c.logger.Warn("get unclosed ledger %d", cc.Ledger.LedgerSequence)
 				} else {
-					c.Ledgers <- &cc.Ledger
+					//c.Ledgers <- &cc.Ledger
+					c.Data <- &cc.Ledger
 
 					index++
 					needSleep = false
@@ -139,11 +144,12 @@ func (c *Connection) loop2(startIndex uint32) {
 		select {
 		case <-c.t2.Dying():
 			return
-		case _, ok := <-c.ledgerIndexCh:
+		case newStream, ok := <-c.ledgerStream:
 			if !ok {
 				c.t2.Kill(nil)
 				return
 			}
+			c.Data <- newStream
 			needSleep = false
 		default:
 		}
