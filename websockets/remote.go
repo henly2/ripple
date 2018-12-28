@@ -79,10 +79,14 @@ func (r *Remote) setDisconnected() {
 	r.disconnected = true
 }
 
+func (r *Remote) getDisconnected() bool {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return r.disconnected
+}
+
 func (r *Remote) canSendCommand(syncer Syncer) bool {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
-	if r.disconnected {
+	if r.getDisconnected() {
 		return false
 	}
 
@@ -139,6 +143,55 @@ func (r *Remote) run() {
 		r.readPump(inbound)
 	}()
 
+	// reason: my app run Ledge function blocked by one day,
+	// so: add timeout monitor for command
+	// --begin timeout monitor
+	timeouting := make(chan uint64)
+	monitoring := make(map[uint64]int64)
+	mutexMonitoring := sync.Mutex{}
+	addMonitor := func(id uint64){
+		mutexMonitoring.Lock()
+		defer mutexMonitoring.Unlock()
+
+		monitoring[id] = time.Now().Unix()
+	}
+	removeMonitor := func() []uint64{
+		mutexMonitoring.Lock()
+		defer mutexMonitoring.Unlock()
+
+		nowTime := time.Now().Unix()
+		outs := []uint64{}
+		// calc timeout ids
+		for id, t := range monitoring {
+			if nowTime - t > 60 {
+				outs = append(outs, id)
+			}
+		}
+
+		// push to timeouting chan
+		for _, id := range outs {
+			delete(monitoring, id)
+		}
+
+		return outs
+	}
+	go func() {
+		defer close(timeouting)
+
+		for {
+			outs := removeMonitor()
+			for _, id := range outs {
+				timeouting <- id
+			}
+
+			time.Sleep(time.Second * 30)
+			if r.getDisconnected() {
+				return
+			}
+		}
+	}()
+	// --end
+
 	// Main run loop
 	var response Command
 	for {
@@ -150,6 +203,8 @@ func (r *Remote) run() {
 			outbound <- command
 			id := reflect.ValueOf(command).Elem().FieldByName("Id").Uint()
 			pending[id] = command
+
+			addMonitor(id)
 
 		case in, ok := <-inbound:
 			if !ok {
@@ -185,6 +240,19 @@ func (r *Remote) run() {
 				continue
 			}
 			cmd.Done()
+
+		case id, ok := <-timeouting:
+			if !ok {
+				continue
+			}
+
+			cmd, ok := pending[id]
+			if !ok {
+				glog.Errorf("Unexpected message timeout id: %+v", id)
+				continue
+			}
+			delete(pending, id)
+			cmd.Fail("timeout")
 		}
 	}
 }

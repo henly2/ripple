@@ -38,7 +38,8 @@ func (c *Command) Fail(message string) {
 	c.CommandError = &CommandError{
 		Name:    "Client Error",
 		Code:    -1,
-		Message: message,
+		//Message: message,
+		Message: fmt.Sprintf("id(%d), cmd(%s) failed by reason:%s", c.Id, c.Name, message),
 	}
 	c.Ready <- struct{}{}
 }
