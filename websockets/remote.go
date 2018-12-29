@@ -155,7 +155,13 @@ func (r *Remote) run() {
 
 		monitoring[id] = time.Now().Unix()
 	}
-	removeMonitor := func() []uint64{
+	delMonitor := func(id uint64){
+		mutexMonitoring.Lock()
+		defer mutexMonitoring.Unlock()
+
+		delete(monitoring, id)
+	}
+	getAndDelMonitor := func() []uint64{
 		mutexMonitoring.Lock()
 		defer mutexMonitoring.Unlock()
 
@@ -168,7 +174,6 @@ func (r *Remote) run() {
 			}
 		}
 
-		// push to timeouting chan
 		for _, id := range outs {
 			delete(monitoring, id)
 		}
@@ -179,7 +184,7 @@ func (r *Remote) run() {
 		defer close(timeouting)
 
 		for {
-			outs := removeMonitor()
+			outs := getAndDelMonitor()
 			for _, id := range outs {
 				timeouting <- id
 			}
@@ -235,7 +240,9 @@ func (r *Remote) run() {
 				continue
 			}
 			delete(pending, response.Id)
+			delMonitor(response.Id)
 			if err := json.Unmarshal(in, &cmd); err != nil {
+				cmd.Fail("wscmd-"+err.Error())
 				glog.Errorln(err.Error())
 				continue
 			}
@@ -248,11 +255,11 @@ func (r *Remote) run() {
 
 			cmd, ok := pending[id]
 			if !ok {
-				glog.Errorf("Unexpected message timeout id: %+v", id)
 				continue
 			}
 			delete(pending, id)
-			cmd.Fail("timeout")
+			cmd.Fail("wscmd-timeout")
+			glog.Errorf("Unexpected timeout message: %d", id)
 		}
 	}
 }
