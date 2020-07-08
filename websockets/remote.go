@@ -11,10 +11,11 @@ import (
 	"sort"
 	"time"
 
+	"sync"
+
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
 	"github.com/rubblelabs/ripple/data"
-	"sync"
 )
 
 const (
@@ -32,7 +33,7 @@ const (
 )
 
 var (
-	errDisconnected = &CommandError{Name:"ws", Code:-1, Message:"ws disconnected"}
+	errDisconnected = &CommandError{Name: "ws", Code: -1, Message: "ws disconnected"}
 )
 
 type Remote struct {
@@ -41,7 +42,7 @@ type Remote struct {
 	ws       *websocket.Conn
 
 	// FIXME: 没有控制在断开之后，还发送指令，造成永远无法返回的死锁问题?
-	mutex sync.RWMutex
+	mutex        sync.RWMutex
 	disconnected bool
 }
 
@@ -149,19 +150,19 @@ func (r *Remote) run() {
 	timeouting := make(chan uint64)
 	monitoring := make(map[uint64]int64)
 	mutexMonitoring := sync.Mutex{}
-	addMonitor := func(id uint64){
+	addMonitor := func(id uint64) {
 		mutexMonitoring.Lock()
 		defer mutexMonitoring.Unlock()
 
 		monitoring[id] = time.Now().Unix()
 	}
-	delMonitor := func(id uint64){
+	delMonitor := func(id uint64) {
 		mutexMonitoring.Lock()
 		defer mutexMonitoring.Unlock()
 
 		delete(monitoring, id)
 	}
-	getAndDelMonitor := func() []uint64{
+	getAndDelMonitor := func() []uint64 {
 		mutexMonitoring.Lock()
 		defer mutexMonitoring.Unlock()
 
@@ -169,7 +170,7 @@ func (r *Remote) run() {
 		outs := []uint64{}
 		// calc timeout ids
 		for id, t := range monitoring {
-			if nowTime - t > 60 {
+			if nowTime-t > 60 {
 				outs = append(outs, id)
 			}
 		}
@@ -242,7 +243,8 @@ func (r *Remote) run() {
 			delete(pending, response.Id)
 			delMonitor(response.Id)
 			if err := json.Unmarshal(in, &cmd); err != nil {
-				cmd.Fail("wscmd-"+err.Error())
+				glog.Errorln(string(in))
+				cmd.Fail("wscmd-" + err.Error())
 				glog.Errorln(err.Error())
 				continue
 			}
